@@ -1,41 +1,54 @@
 #!/usr/bin/env python
-
-import rospy
 import cv2
+import rospy
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+face_cascade = cv2.CascadeClassifier("/home/jetson2gb/cascade/haarcascade_frontalface_default.xml")
+eye_cascade = cv2.CascadeClassifier("/home/jetson2gb/cascade/haarcascade_eye.xml")
+cap = cv2.VideoCapture(0)
+while 1: 
+     
+        pub = rospy.Publisher("frames", Image, queue_size=2)
+        rospy.init_node('stream_publisher', anonymous=True)
+        rate = rospy.Rate(10)
 
-# Fungsi callback untuk menerima gambar dari topik /camera/image
-def image_callback(msg):
-    # Konversi gambar dari ROS Image menjadi OpenCV format
-    bridge = CvBridge()
-    cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+	ret, img = cap.read() 
 
-    # Deteksi wajah menggunakan OpenCV
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    gray_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray_image, 1.3, 5)
 
-    # Gambar kotak pada wajah yang terdeteksi
-    for (x, y, w, h) in faces:
-        cv2.rectangle(cv_image, (x, y), (x+w, y+h), (255, 0, 0), 2)
+	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Menampilkan gambar dengan wajah yang terdeteksi
-    cv2.imshow("Face Detection", cv_image)
-    cv2.waitKey(1)
+	
+	faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-# Inisialisasi node ROS
-rospy.init_node("face_detection_node")
+	for (x,y,w,h) in faces:
+		 
+		cv2.rectangle(img,(x,y),(x+w,y+h),(255,255,0),2) 
+		roi_gray = gray[y:y+h, x:x+w]
+		roi_color = img[y:y+h, x:x+w]
 
-# Membuat objek CvBridge
-bridge = CvBridge()
+		
+		eyes = eye_cascade.detectMultiScale(roi_gray) 
 
-# Membuat subscriber untuk topik gambar /camera/image
-image_sub = rospy.Subscriber("/camera/image", Image, image_callback)
+		
+		for (ex,ey,ew,eh) in eyes:
+			cv2.rectangle(roi_color,(ex,ey),(ex+ew,ey+eh),(0,127,255),2)
 
-# Menampilkan informasi bahwa node siap
-rospy.loginfo("Face detection node is ready")
+	
+	cv2.imshow('img',img)
+        
+        bridge= CvBridge() 
+            
+        ros_image = bridge.cv2_to_imgmsg(img, "bgr8")
+        pub.publish(ros_image)
+        rate.sleep()
 
-# Menjalankan node ROS
-rospy.spin()
+	
+	k = cv2.waitKey(30) & 0xff
+	if k == 27:
+		break
+
+
+cap.release()
+
+
+cv2.destroyAllWindows() 
